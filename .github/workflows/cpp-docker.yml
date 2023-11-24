@@ -20,6 +20,8 @@ jobs:
       run: 
         docker build -t docker.io/dch-webrtc:${{ matrix.label }} -f ${{ matrix.dockerfile }} .
         docker save -o dch-webrtc:${{ matrix.label }}.tar docker.io/dch-webrtc:${{ matrix.label }}
+    - name: tar zip
+      run: 
         tar -czf all.tar.gz dch-webrtc:${{ matrix.label }}.tar
         echo "artifactPath=$(ls all.tar.gz)" >> $GITHUB_ENV
     - uses: actions/upload-artifact@v3
