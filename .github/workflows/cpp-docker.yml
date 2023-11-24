@@ -8,12 +8,6 @@ jobs:
       matrix:
         include:
         - os: ubuntu-latest
-          dockerfile: Dockerfile.arm64
-          label: arm64
-        - os: ubuntu-latest
-          dockerfile: Dockerfile.rpi
-          label: armv6l
-        - os: ubuntu-latest
           dockerfile: Dockerfile
           label: amd64
 
@@ -24,12 +18,10 @@ jobs:
 
     - name: Build an image from Dockerfile
       run: 
-        rm -f *.tar.gz
-        rm -f *.tar
         docker build -t docker.io/dch-webrtc:${{ matrix.label }} -f ${{ matrix.dockerfile }} .
         docker save -o dch-webrtc:${{ matrix.label }}.tar docker.io/dch-webrtc:${{ matrix.label }}
         tar -czf all.tar.gz dch-webrtc:${{ matrix.label }}.tar
-        echo "artifactPath=$(ls *.tar.gz)" >> $GITHUB_ENV
+        echo "artifactPath=$(ls all.tar.gz)" >> $GITHUB_ENV
     - uses: actions/upload-artifact@v3
       with:
         name: ${{ env.artifactPath }}
