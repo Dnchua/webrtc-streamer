@@ -21,9 +21,9 @@ jobs:
     - name: tar zip
       run: 
         docker save -o dch-webrtc-${{ matrix.label }}.tar dch-webrtc:${{ matrix.label }}
-        # echo "artifactPath=$(ls dch-webrtc-amd64.tar)" >> $GITHUB_ENV
+        echo "artifactPath=$(ls dch-webrtc-amd64.tar)" >> $GITHUB_ENV
     - name: Upload Docker Image
       uses: actions/upload-artifact@v3
       with:
-        name: dch-webrtc-amd64
-        path: dch-webrtc-amd64.tar 
+        name: ${{ env.artifactPath }}
+        path: ${{ env.artifactPath }} 
