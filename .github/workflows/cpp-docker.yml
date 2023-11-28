@@ -17,14 +17,13 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Build an image from Dockerfile
-      run: 
-        docker build -t docker.io/dch-webrtc:${{ matrix.label }} -f ${{ matrix.dockerfile }} .
+      run: docker build -t dch-webrtc:${{ matrix.label }} -f ${{ matrix.dockerfile }} .
     - name: tar zip
       run: 
-        docker save -o dch-webrtc:${{ matrix.label }}.tar docker.io/dch-webrtc:${{ matrix.label }}
-        tar -czf all.tar.gz dch-webrtc:${{ matrix.label }}.tar
-        echo "artifactPath=$(ls all.tar.gz)" >> $GITHUB_ENV
-    - uses: actions/upload-artifact@v3
+        docker save -o dch-webrtc-${{ matrix.label }}.tar dch-webrtc:${{ matrix.label }}
+        echo "artifactPath=$(ls dch-webrtc-amd64.tar)" >> $GITHUB_ENV
+    - name: Upload Docker Image
+      uses: actions/upload-artifact@v3
       with:
         name: ${{ env.artifactPath }}
         path: ${{ env.artifactPath }} 
