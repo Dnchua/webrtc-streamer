@@ -50,51 +50,17 @@ bool ignoreInLabel(char c)
 ** -------------------------------------------------------------------------*/
 
 #ifdef WIN32
-#include <winsock2.h>
-#include <iphlpapi.h>
-#include <stdio.h>
-#include <stdlib.h>
-#pragma comment(lib, "IPHLPAPI.lib")
-#pragma comment(lib, "ws2_32.lib")
+std::string getServerIpFromClientIp(int clientip)
+{
+	return "127.0.0.1";
+}
 #else
 #include <net/if.h>
 #include <ifaddrs.h>
-#endif
-std::string getServerIpFromClientIp(long clientip)
+std::string getServerIpFromClientIp(int clientip)
 {
-	std::string serverAddress("127.0.0.1");
-#ifdef WIN32
-    ULONG outBufLen = 0;
-    DWORD dwRetVal = GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_PREFIX, NULL, NULL, &outBufLen);
-    if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
-        PIP_ADAPTER_ADDRESSES pAddresses = (IP_ADAPTER_ADDRESSES*)malloc(outBufLen);
-        if (pAddresses != NULL) {
-            if (GetAdaptersAddresses(AF_INET, GAA_FLAG_INCLUDE_PREFIX, NULL, pAddresses, &outBufLen) == NO_ERROR) {
-
-                for (PIP_ADAPTER_ADDRESSES pCurrAddresses = pAddresses; pCurrAddresses != NULL; pCurrAddresses = pCurrAddresses->Next) {
-
-                    for (PIP_ADAPTER_UNICAST_ADDRESS pUnicast = pCurrAddresses->FirstUnicastAddress; pUnicast != NULL; pUnicast = pUnicast->Next) {
-                        sockaddr* sa = pUnicast->Address.lpSockaddr;
-
-                        if (sa->sa_family == AF_INET) {
-                            struct sockaddr_in* ipv4 = (struct sockaddr_in*)sa;
-                            struct in_addr addr = ipv4->sin_addr;
-
-                            struct in_addr mask;
-                            mask.s_addr = htonl((0xFFFFFFFFU << (32 - pUnicast->OnLinkPrefixLength)) & 0xFFFFFFFFU);
-
-                            if ((addr.s_addr & mask.s_addr) == (clientip & mask.s_addr)) {
-								serverAddress = inet_ntoa(addr);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        free(pAddresses);
-    }
-#else
+	std::string serverAddress;
+	char host[NI_MAXHOST];
 	struct ifaddrs *ifaddr = NULL;
 	if (getifaddrs(&ifaddr) == 0)
 	{
@@ -106,7 +72,6 @@ std::string getServerIpFromClientIp(long clientip)
 				struct sockaddr_in *mask = (struct sockaddr_in *)ifa->ifa_netmask;
 				if ((addr->sin_addr.s_addr & mask->sin_addr.s_addr) == (clientip & mask->sin_addr.s_addr))
 				{
-					char host[NI_MAXHOST];
 					if (getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), host, sizeof(host), NULL, 0, NI_NUMERICHOST) == 0)
 					{
 						serverAddress = host;
@@ -117,9 +82,9 @@ std::string getServerIpFromClientIp(long clientip)
 		}
 	}
 	freeifaddrs(ifaddr);
-#endif
 	return serverAddress;
 }
+#endif
 
 struct IceServer
 {
@@ -233,20 +198,19 @@ std::string getParam(const char *queryString, const char *paramName) {
 /* ---------------------------------------------------------------------------
 **  Constructor
 ** -------------------------------------------------------------------------*/
-PeerConnectionManager::PeerConnectionManager(const std::list<std::string> &iceServerList, const Json::Value & config, const webrtc::AudioDeviceModule::AudioLayer audioLayer, const std::string &publishFilter, const std::string & webrtcUdpPortRange, bool useNullCodec, bool usePlanB, int maxpc, webrtc::PeerConnectionInterface::IceTransportsType transportType)
+PeerConnectionManager::PeerConnectionManager(const std::list<std::string> &iceServerList, const Json::Value & config, const webrtc::AudioDeviceModule::AudioLayer audioLayer, const std::string &publishFilter, const std::string & webrtcUdpPortRange, bool useNullCodec, bool usePlanB, int maxpc)
 	: m_signalingThread(rtc::Thread::Create()),
 	  m_workerThread(rtc::Thread::Create()),
 	  m_audioDecoderfactory(webrtc::CreateBuiltinAudioDecoderFactory()), 
 	  m_task_queue_factory(webrtc::CreateDefaultTaskQueueFactory()),
   	  m_video_decoder_factory(CreateDecoderFactory(useNullCodec)),
 	  m_iceServerList(iceServerList), 
-	  m_config(config),
+	  m_config(config), 
 	  m_publishFilter(publishFilter), 
 	  m_webrtcPortRange(webrtcUdpPortRange),
 	  m_useNullCodec(useNullCodec), 
 	  m_usePlanB(usePlanB),
-	  m_maxpc(maxpc),
-	  m_transportType(transportType)
+	  m_maxpc(maxpc)
 {
 	m_workerThread->SetName("worker", NULL);
 	m_workerThread->Start();
@@ -437,7 +401,7 @@ std::tuple<int, std::map<std::string,std::string>,Json::Value> PeerConnectionMan
 
 	} else {
 		std::string offersdp(in.asString());
-		RTC_LOG(LS_WARNING) << "offer:" << offersdp;
+		RTC_LOG(LS_ERROR) << "offer:" << offersdp;
 		std::unique_ptr<webrtc::SessionDescriptionInterface> desc = this->getAnswer(peerid, offersdp, videourl, audiourl, options, true);
 		if (desc.get()) {
 			desc->ToString(&answersdp);
@@ -449,7 +413,7 @@ std::tuple<int, std::map<std::string,std::string>,Json::Value> PeerConnectionMan
 		} else {
 			RTC_LOG(LS_ERROR) << "Failed to create answer - no SDP";
 		}
-		RTC_LOG(LS_WARNING) << "anwser:" << answersdp;
+		RTC_LOG(LS_INFO) << "anwser:" << answersdp;
 
 	}
 	return std::make_tuple(httpcode, headers, answersdp);
@@ -579,11 +543,6 @@ const Json::Value PeerConnectionManager::getIceServers(const std::string &client
 
 	Json::Value iceServers;
 	iceServers["iceServers"] = urls;
-	if (m_transportType == webrtc::PeerConnectionInterface::IceTransportsType::kRelay) {
-		iceServers["iceTransportPolicy"] = "relay";
-	} else {
-		iceServers["iceTransportPolicy"] = "all";
-	}
 
 	return iceServers;
 }
@@ -1073,11 +1032,10 @@ const Json::Value PeerConnectionManager::getPeerConnectionList()
 							}							
 						}
 
-						std::string streamLabel = localStream->stream_ids()[0];		
-						if (!streams.isMember(streamLabel)) {
-							streams[streamLabel] = Json::Value(Json::objectValue);
-						}			
-						streams[streamLabel][mediaTrack->id()] = track;
+						Json::Value tracks;
+						tracks[mediaTrack->id()] = track;	
+						std::string streamLabel = localStream->stream_ids()[0];					
+						streams[streamLabel] = tracks;
 					}
 				}
 			}
@@ -1158,7 +1116,6 @@ PeerConnectionManager::PeerConnectionObserver *PeerConnectionManager::CreatePeer
 		server.password = srv.pass;
 		config.servers.push_back(server);
 	}
-	config.type = m_transportType;
 
 	// Use example From https://soru.site/questions/51578447/api-c-webrtcyi-kullanarak-peerconnection-ve-ucretsiz-baglant-noktasn-serbest-nasl
 	int minPort = 0;
@@ -1193,15 +1150,31 @@ rtc::scoped_refptr<webrtc::VideoTrackSourceInterface> PeerConnectionManager::Cre
 {
 	RTC_LOG(LS_INFO) << "videourl:" << videourl;
 
-	return CapturerFactory::CreateVideoSource(videourl, opts, m_publishFilter, m_peer_connection_factory, m_video_decoder_factory);
+	std::string video = videourl;
+	if (m_config.isMember(video)) {
+		video = m_config[video]["video"].asString();
+	}
+
+	return CapturerFactory::CreateVideoSource(video, opts, m_publishFilter, m_peer_connection_factory, m_video_decoder_factory);
 }
 
 rtc::scoped_refptr<webrtc::AudioSourceInterface> PeerConnectionManager::CreateAudioSource(const std::string &audiourl, const std::map<std::string, std::string> &opts)
 {
 	RTC_LOG(LS_INFO) << "audiourl:" << audiourl;
 
-	return m_workerThread->BlockingCall([this, audiourl, opts] {
-		return CapturerFactory::CreateAudioSource(audiourl, opts, m_publishFilter, m_peer_connection_factory, m_audioDecoderfactory, m_audioDeviceModule);
+	std::string audio = audiourl;
+	if (m_config.isMember(audio)) {
+		audio = m_config[audio]["audio"].asString();
+	}
+
+	std::map<std::string, std::string>::iterator it = m_videoaudiomap.find(audio);
+	if (it != m_videoaudiomap.end())
+	{
+		audio = it->second;
+	}
+
+	return m_workerThread->BlockingCall([this, audio, opts] {
+		return CapturerFactory::CreateAudioSource(audio, opts, m_publishFilter, m_peer_connection_factory, m_audioDecoderfactory, m_audioDeviceModule);
     });
 }
 
@@ -1255,9 +1228,11 @@ bool PeerConnectionManager::AddStreams(webrtc::PeerConnectionInterface *peer_con
 		video = m_config[video]["video"].asString();
 	}
 
-	std::string audio = audiourl;
-	if (m_config.isMember(audio)) {
-		audio = m_config[audio]["audio"].asString();
+	// compute audiourl if not set
+	std::string audio(audiourl);
+	if (audio.empty())
+	{
+		audio = videourl;
 	}
 
 	// set bandwidth

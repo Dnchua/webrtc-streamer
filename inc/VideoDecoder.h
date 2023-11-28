@@ -118,7 +118,7 @@ class VideoDecoder : public rtc::VideoSourceInterface<webrtc::VideoFrame>, publi
                     std::vector<uint8_t> sps = extractParameters(spsstr);
                     frames.push_back(sps);
 
-                    std::string ppsstr(sproppps+strlen(pattern));
+                    std::string ppsstr(spropvps+strlen(pattern));
                     std::vector<uint8_t> pps = extractParameters(ppsstr);
                     frames.push_back(pps);
                 }
@@ -198,7 +198,7 @@ class VideoDecoder : public rtc::VideoSourceInterface<webrtc::VideoFrame>, publi
                 settings.set_codec_type(webrtc::VideoCodecType::kVideoCodecH264);
             } else if (format == "H265") {
                 m_decoder=m_factory->CreateVideoDecoder(webrtc::SdpVideoFormat(format));
-                settings.set_codec_type(webrtc::VideoCodecType::kVideoCodecH265);
+                settings.set_codec_type(webrtc::VideoCodecType::kVideoCodecGeneric);
             } else if (format == "VP9") {
                 m_decoder=m_factory->CreateVideoDecoder(webrtc::SdpVideoFormat(cricket::kVp9CodecName));
                 settings.set_codec_type(webrtc::VideoCodecType::kVideoCodecVP9);	                

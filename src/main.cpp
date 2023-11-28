@@ -38,13 +38,6 @@ void sighandler(int n)
 	rtc::Thread::Current()->Quit(); 
 }
 
-class TurnAuth : public cricket::TurnAuthInterface {
-	public:
-		virtual bool GetKey(absl::string_view username,absl::string_view realm, std::string* key) { 
-			return cricket::ComputeStunCredentialHash(std::string(username), std::string(realm), std::string(username), key); 
-		}
-};
-
 /* ---------------------------------------------------------------------------
 **  main
 ** -------------------------------------------------------------------------*/
@@ -71,9 +64,7 @@ int main(int argc, char* argv[])
 	bool        useNullCodec = false;
 	bool        usePlanB = false;
 	int         maxpc = 0;
-	webrtc::PeerConnectionInterface::IceTransportsType transportType = webrtc::PeerConnectionInterface::IceTransportsType::kAll;
 	std::string webrtcTrialsFields = "WebRTC-FrameDropper/Disabled/";
-	TurnAuth 	turnAuth;
 
 	std::string httpAddress("0.0.0.0:");
 	std::string httpPort = "8000";
@@ -86,7 +77,7 @@ int main(int argc, char* argv[])
 
 	std::string streamName;
 	int c = 0;
-	while ((c = getopt (argc, argv, "hVv::C:" "c:H:w:N:A:D:Xm:I:" "T::t:S::s::R:W:" "a::q:ob" "n:u:U:")) != -1)
+	while ((c = getopt (argc, argv, "hVv::C:" "c:H:w:N:A:D:Xm:" "T::t:S::s::R:W:" "a::q:ob" "n:u:U:")) != -1)
 	{
 		switch (c)
 		{
@@ -98,7 +89,6 @@ int main(int argc, char* argv[])
 			case 'D': authDomain = optarg;         break;
 			case 'X': disableXframeOptions = true; break;
 			case 'm': maxpc = atoi(optarg);        break;
-			case 'I': transportType = (webrtc::PeerConnectionInterface::IceTransportsType)atoi(optarg);break;
 
 			case 'T': localturnurl = optarg ? optarg : defaultlocalturnurl; turnurl = localturnurl; break;
 			case 't': turnurl = optarg;                                                             break;
@@ -211,7 +201,7 @@ int main(int argc, char* argv[])
 	// init trials fields
 	webrtc::field_trial::InitFieldTrialsFromString(webrtcTrialsFields.c_str());
 
-	webRtcServer = new PeerConnectionManager(iceServerList, config["urls"], audioLayer, publishFilter, localWebrtcUdpPortRange, useNullCodec, usePlanB, maxpc, transportType);
+	webRtcServer = new PeerConnectionManager(iceServerList, config["urls"], audioLayer, publishFilter, localWebrtcUdpPortRange, useNullCodec, usePlanB, maxpc);
 	if (!webRtcServer->InitializePeerConnection())
 	{
 		std::cout << "Cannot Initialize WebRTC server" << std::endl;
@@ -283,7 +273,6 @@ int main(int argc, char* argv[])
 				rtc::SocketAddress server_addr;
 				server_addr.FromString(addr);
 				turnserver.reset(new cricket::TurnServer(rtc::Thread::Current()));
-				turnserver->set_auth_hook(&turnAuth);
 
 				rtc::Socket* tcp_server_socket = thread->socketserver()->CreateSocket(AF_INET, SOCK_STREAM);
 				if (tcp_server_socket) {
@@ -291,16 +280,6 @@ int main(int argc, char* argv[])
 					tcp_server_socket->Bind(server_addr);
 					tcp_server_socket->Listen(5);
 					turnserver->AddInternalServerSocket(tcp_server_socket, cricket::PROTO_TCP);
-				} else {
-					std::cout << "Failed to create TURN TCP server socket" << std::endl;
-				}
-
-				rtc::AsyncUDPSocket* udp_server_socket = rtc::AsyncUDPSocket::Create(thread->socketserver(), server_addr);
-				if (udp_server_socket) {
-					std::cout << "TURN Listening UDP at " << server_addr.ToString() << std::endl;
-					turnserver->AddInternalSocket(udp_server_socket, cricket::PROTO_UDP);
-				} else {
-					std::cout << "Failed to create TURN UDP server socket" << std::endl;
 				}
 
 				is.str(turnurl);
